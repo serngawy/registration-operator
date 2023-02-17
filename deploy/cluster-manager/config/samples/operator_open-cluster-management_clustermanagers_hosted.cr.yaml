@@ -16,3 +16,8 @@ spec:
       workWebhookConfiguration:
         address: management-control-plane
         port: 31443
+  # Enable ManifestWorkReplicaSet for e2e
+  workConfiguration:
+    featureGates:
+    - feature: ManifestWorkReplicaSet
+      mode: Enable

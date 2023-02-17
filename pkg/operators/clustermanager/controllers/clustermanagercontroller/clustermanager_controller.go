@@ -3,6 +3,8 @@ package clustermanagercontroller
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
+	"strings"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -29,6 +31,7 @@ import (
 	operatorv1client "open-cluster-management.io/api/client/operator/clientset/versioned/typed/operator/v1"
 	operatorinformer "open-cluster-management.io/api/client/operator/informers/externalversions/operator/v1"
 	operatorlister "open-cluster-management.io/api/client/operator/listers/operator/v1"
+	ocmfeature "open-cluster-management.io/api/feature"
 	operatorapiv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/registration-operator/manifests"
 	"open-cluster-management.io/registration-operator/pkg/helpers"
@@ -398,4 +401,19 @@ func cleanResources(ctx context.Context, kubeClient kubernetes.Interface, cm *op
 		}
 	}
 	return cm, reconcileContinue, nil
+}
+
+func isManifestWorkReplicaSetEnabled(config manifests.HubConfig) bool {
+	if len(config.WorkFeatureGates) == 0 {
+		return false
+	}
+
+	mwrSetFeature := fmt.Sprintf("%s=true", ocmfeature.ManifestWorkReplicaSet)
+	for _, fg := range config.WorkFeatureGates {
+		if strings.Contains(fg, mwrSetFeature) {
+			return true
+		}
+	}
+
+	return false
 }

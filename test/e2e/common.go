@@ -31,6 +31,7 @@ import (
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workv1client "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	ocmfeature "open-cluster-management.io/api/feature"
 	operatorapiv1 "open-cluster-management.io/api/operator/v1"
 	workapiv1 "open-cluster-management.io/api/work/v1"
 	"open-cluster-management.io/registration-operator/pkg/helpers"
@@ -53,6 +54,7 @@ type Tester struct {
 	hubRegistrationDeployment        string
 	hubRegistrationWebhookDeployment string
 	hubWorkWebhookDeployment         string
+	hubWorkControllerDeployment      string
 	hubPlacementDeployment           string
 	operatorNamespace                string
 	klusterletOperator               string
@@ -71,6 +73,7 @@ func NewTester(kubeconfigPath string) *Tester {
 		hubRegistrationDeployment:        "cluster-manager-registration-controller",
 		hubRegistrationWebhookDeployment: "cluster-manager-registration-webhook",
 		hubWorkWebhookDeployment:         "cluster-manager-work-webhook",
+		hubWorkControllerDeployment:      "cluster-manager-work-controller",
 		hubPlacementDeployment:           "cluster-manager-placement-controller",
 		operatorNamespace:                "open-cluster-management",
 		klusterletOperator:               "klusterlet",
@@ -527,6 +530,22 @@ func (t *Tester) CheckHubReady() error {
 		return nil
 	}, t.EventuallyTimeout*5, t.EventuallyInterval*5).Should(gomega.BeNil())
 
+	if t.isMWReplicaSetFeatureEnabled() {
+		gomega.Eventually(func() error {
+			workHubControllerDeployment, err := t.KubeClient.AppsV1().Deployments(t.clusterManagerNamespace).
+				Get(context.TODO(), t.hubWorkControllerDeployment, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			replicas := *workHubControllerDeployment.Spec.Replicas
+			readyReplicas := workHubControllerDeployment.Status.ReadyReplicas
+			if readyReplicas != replicas {
+				return fmt.Errorf("deployment %s should have %d but got %d ready replicas", t.hubWorkControllerDeployment, replicas, readyReplicas)
+			}
+			return nil
+		}, t.EventuallyTimeout*5, t.EventuallyInterval*5).Should(gomega.BeNil())
+	}
+
 	if _, err := t.KubeClient.AppsV1().Deployments(t.clusterManagerNamespace).
 		Get(context.TODO(), t.hubPlacementDeployment, metav1.GetOptions{}); err != nil {
 		return err
@@ -708,4 +727,24 @@ func (t *Tester) CheckManagedClusterAddOnStatus(managedClusterNamespace, addOnNa
 	}
 
 	return nil
+}
+
+func (t *Tester) isMWReplicaSetFeatureEnabled() bool {
+	cms, err := t.OperatorClient.OperatorV1().ClusterManagers().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return false
+	}
+	if len(cms.Items) == 0 {
+		return false
+	}
+	// cm should be same as deploy/cluster-manager/config/samples/operator_open-cluster-management_clustermanagers.cr.yaml
+	// check WorkConfiguration->Feature->ManifestWorkReplicaSet
+	cm := cms.Items[0]
+	for _, fg := range cm.Spec.WorkConfiguration.FeatureGates {
+		if fg.Feature == string(ocmfeature.ManifestWorkReplicaSet) && fg.Mode == operatorapiv1.FeatureGateModeTypeEnable {
+			return true
+		}
+	}
+
+	return false
 }

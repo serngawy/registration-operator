@@ -13,3 +13,8 @@ spec:
     featureGates:
     - feature: DefaultClusterSet
       mode: Enable
+  # Enable ManifestWorkReplicaSet for e2e
+  workConfiguration:
+    featureGates:
+    - feature: ManifestWorkReplicaSet
+      mode: Enable

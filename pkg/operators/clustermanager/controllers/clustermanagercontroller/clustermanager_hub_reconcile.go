@@ -43,6 +43,13 @@ var (
 		"cluster-manager/hub/cluster-manager-placement-serviceaccount.yaml",
 	}
 
+	mwReplicaSetResourceFiles = []string{
+		// manifestworkreplicaset
+		"cluster-manager/hub/cluster-manager-manifestworkreplicaset-clusterrole.yaml",
+		"cluster-manager/hub/cluster-manager-manifestworkreplicaset-clusterrolebinding.yaml",
+		"cluster-manager/hub/cluster-manager-manifestworkreplicaset-serviceaccount.yaml",
+	}
+
 	hubAddOnManagerRbacResourceFiles = []string{
 		// addon-manager
 		"cluster-manager/hub/cluster-manager-addon-manager-clusterrole.yaml",
@@ -75,6 +82,14 @@ func (c *hubReoncile) reconcile(ctx context.Context, cm *operatorapiv1.ClusterMa
 	// If AddOnManager is not enabled, remove related resources
 	if operatorapiv1.ComponentModeType(config.AddOnManagerComponentMode) != operatorapiv1.ComponentModeTypeEnable {
 		_, _, err := cleanResources(ctx, c.hubKubeClient, cm, config, hubAddOnManagerRbacResourceFiles...)
+		if err != nil {
+			return cm, reconcileStop, err
+		}
+	}
+
+	// Remove ManifestWokReplicaSet deployment if feature not enabled
+	if !isManifestWorkReplicaSetEnabled(config) {
+		_, _, err := cleanResources(ctx, c.hubKubeClient, cm, config, mwReplicaSetResourceFiles...)
 		if err != nil {
 			return cm, reconcileStop, err
 		}
@@ -129,6 +144,10 @@ func getHubResources(mode operatorapiv1.InstallMode, config manifests.HubConfig)
 	hubResources = append(hubResources, hubRbacResourceFiles...)
 	if operatorapiv1.ComponentModeType(config.AddOnManagerComponentMode) == operatorapiv1.ComponentModeTypeEnable {
 		hubResources = append(hubResources, hubAddOnManagerRbacResourceFiles...)
+	}
+
+	if isManifestWorkReplicaSetEnabled(config) {
+		hubResources = append(hubResources, mwReplicaSetResourceFiles...)
 	}
 	// the hubHostedWebhookServiceFiles are only used in hosted mode
 	if mode == operatorapiv1.InstallModeHosted {

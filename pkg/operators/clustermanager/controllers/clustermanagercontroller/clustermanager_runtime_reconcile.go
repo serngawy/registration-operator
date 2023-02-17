@@ -34,6 +34,10 @@ var (
 	addOnManagerDeploymentFiles = []string{
 		"cluster-manager/management/cluster-manager-addon-manager-deployment.yaml",
 	}
+
+	mwReplicaSetDeploymentFiles = []string{
+		"cluster-manager/management/cluster-manager-manifestworkreplicaset-deployment.yaml",
+	}
 )
 
 type runtimeReconcile struct {
@@ -51,6 +55,14 @@ func (c *runtimeReconcile) reconcile(ctx context.Context, cm *operatorapiv1.Clus
 	// If AddOnManager is not enabled, remove related resources
 	if operatorapiv1.ComponentModeType(config.AddOnManagerComponentMode) != operatorapiv1.ComponentModeTypeEnable {
 		_, _, err := cleanResources(ctx, c.kubeClient, cm, config, addOnManagerDeploymentFiles...)
+		if err != nil {
+			return cm, reconcileStop, err
+		}
+	}
+
+	// Remove ManifestWokReplicaSet deployment if feature not enabled
+	if !isManifestWorkReplicaSetEnabled(config) {
+		_, _, err := cleanResources(ctx, c.kubeClient, cm, config, mwReplicaSetDeploymentFiles...)
 		if err != nil {
 			return cm, reconcileStop, err
 		}
@@ -105,6 +117,9 @@ func (c *runtimeReconcile) reconcile(ctx context.Context, cm *operatorapiv1.Clus
 	deployResources := deploymentFiles
 	if operatorapiv1.ComponentModeType(config.AddOnManagerComponentMode) == operatorapiv1.ComponentModeTypeEnable {
 		deployResources = append(deployResources, addOnManagerDeploymentFiles...)
+	}
+	if isManifestWorkReplicaSetEnabled(config) {
+		deployResources = append(deployResources, mwReplicaSetDeploymentFiles...)
 	}
 	for _, file := range deployResources {
 		updatedDeployment, currentGeneration, err := helpers.ApplyDeployment(
@@ -176,5 +191,6 @@ func getSAs(clusterManagerName string) []string {
 		clusterManagerName + "-registration-webhook-sa",
 		clusterManagerName + "-work-webhook-sa",
 		clusterManagerName + "-placement-controller-sa",
+		clusterManagerName + "-work-controller-sa",
 	}
 }
